@@ -1,0 +1,204 @@
+---
+title: "Project 1"
+author: "Maxim Arisov"
+date: "2026-09-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Project 1
+
+Approach
+
+For this project, I will use the chess tournament data provided for the assignment. My goal is to clean the data and create a CSV file with information about each player.
+
+First, I will read the tournament data into R and look at how the data is set and organized.
+
+Next, I will find each player's name, state, total points, pre tournament rating, and opponents.
+
+Then, I will use the opponent numbers to find each opponent's pre tournament rating. I will calculate the average opponent rating for each player. For example, Gary Hua's average opponent rating is 1605.
+
+Finally, I will create a clean table with the following items:
+
+Player Name, State, Total Points, Pre Rating, and Average Opponent Pre Rating.
+
+At last, I will check the results and save the final table as a CSV file.
+
+Code Base
+
+```{r}
+install.packages("pdftools")
+library(pdftools)
+```
+
+```{r}
+#Lets show PDF location on gitHub.
+url <- "https://raw.githubusercontent.com/Maximus2485/Project-1-.DATA-607/main/Project%201%20dataset.tournamentinfo.pdf"
+```
+
+```{r}
+#Lets download PDF file
+download.file(url, "Project 1 dataset.tournamentinfo.pdf", mode="wb")
+# Lets read PDF
+chess <- pdf_text("Project 1 dataset.tournamentinfo.pdf")
+head(chess)
+```
+
+```{r}
+#Combine PDF pages
+chess_text <- paste(chess, collapse="\n")
+# Lets split the dataset into lines
+chess_lines <- unlist(strsplit(chess_text, "\n"))
+head(chess_lines, 20)
+```
+
+```{r}
+#Lets find player information in the lines having "I" and total number with a 
+# decimal point
+player_lines <- chess_lines[
+  grepl("\\|", chess_lines) &
+  grepl("[0-9]+\\.[0-9]", chess_lines)
+]
+
+# Check player lines
+head(player_lines)
+```
+
+```{r}
+#Lets find the rating/state lines
+rating_lines <- chess_lines[grep("R:", chess_lines)]
+head(rating_lines)
+```
+
+```{r}
+#Lets extract players names
+player_name <- trimws(
+  sub("\\|.*", "",
+  sub("^\\ s*[0-9]+\\|", "", player_lines))
+)
+player_name
+```
+
+```{r}
+#Lets extract total points
+points <- sapply(strsplit(player_lines, "\\|"), function(x) {
+  as.numeric(trimws(x[3]))
+})
+
+points
+```
+
+```{r}
+#Lets extract state
+state <- trimws(
+  sub("\\|.*", "", rating_lines)
+)
+state
+```
+
+```{r}
+#Lets extract pre-rating
+pre_rating <- as.numeric(
+  sub(".*R:\\s*([0-9]+).*", "\\1", rating_lines)
+)
+pre_rating
+```
+
+```{r}
+#Lets create the basic player table
+players <- data.frame(
+  Player = player_name,
+  State = state,
+  Points = points,
+  Pre_Rating = pre_rating
+)
+head(players)
+```
+
+```{r}
+#Lets extract opponent numbers
+get_opponents <- function(x) {
+  
+  parts <- strsplit(x, "\\|")[[1]]
+  
+  rounds <- parts[4:length(parts)]
+  
+  opponents <- as.numeric(gsub("[^0-9]","", rounds)
+                          
+                          )
+  
+  opponents[!is.na(opponents)]
+}
+#Lets apply it to every player:
+opponents <- lapply(player_lines, get_opponents)
+opponents[[1]]
+
+```
+
+```{r}
+#Lets calculate average opponent pre-rating
+average_opponent_rating <- sapply(opponents, function(x) {
+  mean(players$Pre_Rating[x],
+       na.rm=TRUE )
+})
+#Add it to the table
+players$Avg_Opponent_Rating <- round(average_opponent_rating)
+
+#Check the final results
+head(players)
+```
+
+```{r}
+#Lets use SQLite
+install.packages("DBI")
+install.packages("RSQLite")
+library(DBI)
+library(RSQLite)
+
+# Lets create database connection
+con <- dbConnect(SQLite(), "Project 1 dataset.tournamentinfo.db")
+
+# Lets put players data into SQL database
+dbWriteTable(con, "players", players, overwrite = TRUE)
+```
+
+
+SQL Query
+```{sql connection=con}
+SELECT
+    Player,
+    State,
+    Points,
+    Pre_Rating,
+    Avg_Opponent_Rating
+FROM players;
+
+```
+
+
+```{r}
+#Lets export SQL results to CSV file
+final_data <- dbGetQuery(
+  con,"SELECT
+    Player,
+    State,
+    Points,
+    Pre_Rating,
+    Avg_Opponent_Rating
+FROM players"
+)
+write.csv(final_data, "chess_results.csv", row.names = FALSE)
+```
+
+```{r}
+dbDisconnect(con)
+```
+
+References
+
+Google Deep Mind. (2026). Gemini 3 Flash [Large language model]. [[https://gemini.google.com.%5D(https://gemini.google.com/](https://gemini.google.com.%5D(https://gemini.google.com/)%7B.uri%7D) Accessed September 27th, 2026.
+
+Wickham, H., Çetinkaya-Rundel, M., & Grolemund, G. (2023). R for data science (2nd ed.). O'Reilly Media. <https://r4ds.hadley.nz/>
